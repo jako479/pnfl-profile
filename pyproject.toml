@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pnfl-profile"
 version = "0.1.0"
-description = "Library applying PNFL league rules and validation to Front Page Sports Football Pro '98 coaching profiles (.prf)."
-authors = [{name = "Brian Jacobs"}]
+description = "Library applying PNFL league rules and validation to a Front Page Sports Football Pro '98 coaching profile (.prf)."
+authors = [{ name = "Brian Jacobs" }]
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -33,19 +33,19 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = [
-    "E",    # pycodestyle errors
-    "F",    # pyflakes (unused imports/vars, undefined names)
-    "I",    # isort (import sorting)
-    "B",    # flake8-bugbear (likely bugs)
-    "UP",   # pyupgrade (modernize syntax)
-    "RUF",  # ruff-specific
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (unused imports/vars, undefined names)
+    "I",   # isort (import sorting)
+    "B",   # flake8-bugbear (likely bugs)
+    "UP",  # pyupgrade (modernize syntax)
+    "RUF", # ruff-specific
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
-    "E501",    # long assertion messages are common in tests
-    "B905",    # zip(x, x[1:]) without strict= is idiomatic for adjacent-pair iteration in tests
-    "RUF007",  # same idiom — itertools.pairwise rewrite is unnecessary churn in tests
+    "E501",   # long assertion messages are common in tests
+    "B905",   # zip(x, x[1:]) without strict= is idiomatic for adjacent-pair iteration in tests
+    "RUF007", # same idiom — itertools.pairwise rewrite is unnecessary churn in tests
 ]
 
 [tool.ruff.format]

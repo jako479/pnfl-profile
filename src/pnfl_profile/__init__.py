@@ -1,4 +1,4 @@
-"""Library applying PNFL league rules and validation to Front Page Sports Football Pro '98 coaching profiles (.prf)."""
+"""Library applying PNFL league rules and validation to a Front Page Sports Football Pro '98 coaching profile (.prf)."""
 
 from pnfl_profile.model import (
     PnflProfile,
