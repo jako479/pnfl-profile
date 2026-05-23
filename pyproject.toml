@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pnfl-profile"
+version = "0.1.0"
+description = "Library applying PNFL league rules and validation to Front Page Sports Football Pro '98 coaching profiles (.prf)."
+authors = [{name = "Brian Jacobs"}]
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = ["fbpro98-profile"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pyright==1.1.409", "ruff", "ipython"]
+
+# [project.urls]
+# Homepage = "https://github.com/<owner>/<repo>"
+# Repository = "https://github.com/<owner>/<repo>"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (unused imports/vars, undefined names)
+    "I",    # isort (import sorting)
+    "B",    # flake8-bugbear (likely bugs)
+    "UP",   # pyupgrade (modernize syntax)
+    "RUF",  # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "E501",    # long assertion messages are common in tests
+    "B905",    # zip(x, x[1:]) without strict= is idiomatic for adjacent-pair iteration in tests
+    "RUF007",  # same idiom — itertools.pairwise rewrite is unnecessary churn in tests
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+exclude = [
+    "**/*.egg-info",
+    "**/.*",
+    "**/.venv",
+    "**/__pycache__",
+    "**/build",
+    "**/dist",
+    "**/node_modules",
+    "**/output",
+    "**/venv",
+]
+extraPaths = ["src"]
+typeCheckingMode = "standard"
+reportUnusedImport = "warning"
+pythonVersion = "3.13"
+venvPath = ".."
+venv = ".venv"
