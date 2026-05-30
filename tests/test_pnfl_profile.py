@@ -12,7 +12,6 @@ from fbpro98_profile import Profile, read_profile
 from pnfl_profile import (
     PNFL_RULES,
     PnflProfile,
-    PnflRuleWarning,
 )
 
 
@@ -70,13 +69,13 @@ def test_save_persists_despite_violations(
     pp = PnflProfile(profile=bad, rules=PNFL_RULES)
     out_path = tmp_path / "BAD.prf"
 
-    with pytest.warns(PnflRuleWarning) as captured, caplog.at_level(logging.INFO, logger="pnfl_profile.model"):
+    with caplog.at_level(logging.INFO, logger="pnfl_profile.model"):
         result = pp.save(str(out_path))
 
     # File IS written despite violations.
     assert out_path.exists()
     assert any(v.rule_name == "audibles_unchecked" for v in result)
-    assert any("audibles" in str(w.message).lower() for w in captured.list)
+    assert any(r.levelno == logging.WARNING and "audibles" in r.message.lower() for r in caplog.records)
     assert any(
         r.levelno == logging.INFO and "Persisted with" in r.message and "violation" in r.message for r in caplog.records
     )
@@ -88,7 +87,6 @@ def test_save_overwrites_existing_with_violations(offense_profile: Profile, tmp_
     out_path.write_bytes(b"sentinel")
     bad = replace(offense_profile, use_audibles=True)
 
-    with pytest.warns(PnflRuleWarning):
-        PnflProfile(profile=bad, rules=PNFL_RULES).save(str(out_path))
+    PnflProfile(profile=bad, rules=PNFL_RULES).save(str(out_path))
 
     assert out_path.read_bytes() != b"sentinel"

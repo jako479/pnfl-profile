@@ -10,7 +10,6 @@ treat a `PnflProfile` as the profile directly without reaching through
 from __future__ import annotations
 
 import logging
-import warnings
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar, Self
@@ -29,10 +28,6 @@ from fbpro98_profile import (
 from pnfl_profile.rules import PnflRules
 
 logger = logging.getLogger(__name__)
-
-
-class PnflRuleWarning(UserWarning):
-    """Emitted by `PnflProfile.save()` for each PNFL rule violation."""
 
 
 class RuleName(StrEnum):
@@ -128,23 +123,19 @@ class PnflProfile:
         return validate_profile(self.profile, self.rules)
 
     def save(self, path: str) -> tuple[Violation, ...]:
-        """Persist the profile; emit per-violation warnings; return the violation tuple.
+        """Persist the profile; log each violation at WARNING; return the violation tuple.
 
         The file is written regardless of whether the profile satisfies the bound
-        PNFL rule set. PNFL violations are emitted as `warnings.warn(..., PnflRuleWarning)`
-        (one per violation, prefixed with `[situation N]` when tied to a specific
-        situation) and returned to the caller. Callers that want to gate writes
-        on violations should call `validate()` first and skip `save()` if the
-        report is non-empty.
-
-        The library does not install a `warnings` filter; applications that want
-        every violation surfaced on every save should call
-        `warnings.simplefilter("always", PnflRuleWarning)` at entry.
+        PNFL rule set. PNFL violations are logged via this module's logger (one
+        `logger.warning` per violation, prefixed with `[situation N]` when tied
+        to a specific situation) and returned to the caller. Callers that want
+        to gate writes on violations should call `validate()` first and skip
+        `save()` if the report is non-empty.
         """
         violations = self.validate()
         for v in violations:
             prefix = f"[situation {v.situation_number}] " if v.situation_number is not None else ""
-            warnings.warn(f"{prefix}{v.message}", PnflRuleWarning, stacklevel=2)
+            logger.warning("%s%s", prefix, v.message)
         write_profile(self.profile, path)
         if violations:
             logger.info("Persisted with %d PNFL rule violation(s)", len(violations))

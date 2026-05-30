@@ -27,7 +27,6 @@ from fbpro98_profile import (
 
 from pnfl_profile.model import (
     PnflProfile,
-    PnflRuleWarning,
     RuleName,
     Violation,
 )
@@ -62,7 +61,6 @@ __all__ = [
     "PatPointSpread",
     "PatSituation",
     "PnflProfile",
-    "PnflRuleWarning",
     "PnflRules",
     "PointSpread",
     "Profile",
