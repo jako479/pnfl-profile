@@ -6,15 +6,16 @@ public entry point used by `PnflProfile.validate()`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from fbpro98_profile import (
     CategoryWeights,
-    Down,
     MinutesRemaining,
     Profile,
     Situation,
 )
 
-from pnfl_profile.model import Violation
+from pnfl_profile.model import RuleName, Violation
 from pnfl_profile.rules import PnflRules, SituationRule
 
 
@@ -37,7 +38,7 @@ def _validate_audibles(profile: Profile, rules: PnflRules) -> list[Violation]:
         return []
     return [
         Violation(
-            rule_name="audibles_unchecked",
+            rule_name=RuleName.AUDIBLES_UNCHECKED,
             message="Audibles must be unchecked in all PNFL profiles.",
         )
     ]
@@ -52,7 +53,7 @@ def _validate_substitutions(profile: Profile, rules: PnflRules) -> list[Violatio
         return []
     return [
         Violation(
-            rule_name="offense_qb_substitution",
+            rule_name=RuleName.OFFENSE_QB_SUBSTITUTION,
             message=(
                 f"Offensive QB substitution must be {required.out_percent}/{required.in_percent}, "
                 f"got {actual.out_percent}/{actual.in_percent}."
@@ -70,52 +71,82 @@ def _validate_situations(profile: Profile, rules: PnflRules) -> list[Violation]:
     if profile.is_offense:
         side_rules = rules.offense_situations
         relaxed_positions = rules.offense_relaxed_field_positions
-        side = "offense"
+        exempt = rules.offense_exempt_categories
+        names = _OFFENSE_NAMES
     else:
         side_rules = rules.defense_situations
         relaxed_positions = rules.defense_relaxed_field_positions
-        side = "defense"
+        exempt = rules.defense_exempt_categories
+        names = _DEFENSE_NAMES
 
     violations: list[Violation] = []
     for situation in profile.situations:
-        # Rules only apply when more than 5 minutes remain in the half.
+        cats_with_weight = _categories_with_weight(situation.category_weights)
+
+        # Waive min-categories when every category with weight > 0 is exempt.
+        # Matrix rules below still fire.
+        waive_min_categories = bool(cats_with_weight) and cats_with_weight.issubset(exempt)
+
         if situation.minutes_remaining != MinutesRemaining.OVER_FIVE:
-            continue
+            side_min = rules.min_categories_relaxed
+            matrix_rule: SituationRule | None = None
+        else:
+            relaxed = situation.field_position in relaxed_positions
+            side_min = rules.min_categories_relaxed if relaxed else rules.min_categories_standard
+            matrix_rule = side_rules.get((situation.down, situation.yards_to_go, situation.field_position))
 
-        # 4th down: punt/FG situations have no PNFL category minimum.
-        if situation.down == Down.Fourth:
-            continue
+        if matrix_rule is not None:
+            violations.extend(_check_matrix_rule(situation, matrix_rule, cats_with_weight, names))
 
-        relaxed = situation.field_position in relaxed_positions
-        side_min = rules.min_categories_relaxed if relaxed else rules.min_categories_standard
-
-        rule = side_rules.get((situation.down, situation.yards_to_go, situation.field_position))
-        if rule is None:
-            # No matrix-specific rule — only the side-wide min applies.
-            violations.extend(_check_min_distinct(situation, side_min, side))
-            continue
-
-        effective_min = min(rule.min_distinct_categories, side_min)
-        violations.extend(_check_situation_rule(situation, rule, effective_min, side))
+        if not waive_min_categories and len(cats_with_weight) < side_min:
+            violations.append(
+                Violation(
+                    rule_name=names.min_categories,
+                    message=(
+                        f"Situation {situation.situation_number} has {len(cats_with_weight)} "
+                        f"category(ies) with non-zero weight; PNFL requires {side_min}."
+                    ),
+                    situation_number=situation.situation_number,
+                )
+            )
 
     return violations
 
 
-def _check_situation_rule(
+@dataclass(frozen=True, slots=True)
+class _SideRuleNames:
+    allowed: RuleName
+    mandatory: RuleName
+    min_categories: RuleName
+
+
+_OFFENSE_NAMES = _SideRuleNames(
+    allowed=RuleName.OFFENSE_ALLOWED_CATEGORIES,
+    mandatory=RuleName.OFFENSE_MANDATORY_CATEGORY,
+    min_categories=RuleName.OFFENSE_MIN_CATEGORIES,
+)
+_DEFENSE_NAMES = _SideRuleNames(
+    allowed=RuleName.DEFENSE_ALLOWED_CATEGORIES,
+    mandatory=RuleName.DEFENSE_MANDATORY_CATEGORY,
+    min_categories=RuleName.DEFENSE_MIN_CATEGORIES,
+)
+
+
+def _check_matrix_rule(
     situation: Situation,
     rule: SituationRule,
-    effective_min: int,
-    side: str,
+    cats_with_weight: frozenset[int],
+    names: _SideRuleNames,
 ) -> list[Violation]:
+    """Check allowed-categories and mandatory-alternatives for one situation."""
     violations: list[Violation] = []
-    cats_with_weight = _categories_with_weight(situation.category_weights)
 
     if rule.allowed_categories is not None:
         disallowed = sorted(cats_with_weight - rule.allowed_categories)
         if disallowed:
             violations.append(
                 Violation(
-                    rule_name=f"{side}_allowed_categories",
+                    rule_name=names.allowed,
                     message=(
                         f"Situation {situation.situation_number} uses disallowed categories: "
                         f"{', '.join(f'0x{c:02X}' for c in disallowed)}"
@@ -129,7 +160,7 @@ def _check_situation_rule(
             choices = ", ".join(f"0x{c:02X}" for c in sorted(alternative))
             violations.append(
                 Violation(
-                    rule_name=f"{side}_mandatory_category",
+                    rule_name=names.mandatory,
                     message=(
                         f"Situation {situation.situation_number} is missing a mandatory category (one of: {choices})"
                     ),
@@ -137,35 +168,7 @@ def _check_situation_rule(
                 )
             )
 
-    if len(cats_with_weight) < effective_min:
-        violations.append(
-            Violation(
-                rule_name=f"{side}_min_categories",
-                message=(
-                    f"Situation {situation.situation_number} has {len(cats_with_weight)} "
-                    f"category(ies) with non-zero weight; PNFL requires {effective_min}."
-                ),
-                situation_number=situation.situation_number,
-            )
-        )
-
     return violations
-
-
-def _check_min_distinct(situation: Situation, minimum: int, side: str) -> list[Violation]:
-    cats = _categories_with_weight(situation.category_weights)
-    if len(cats) >= minimum:
-        return []
-    return [
-        Violation(
-            rule_name=f"{side}_min_categories",
-            message=(
-                f"Situation {situation.situation_number} has {len(cats)} "
-                f"category(ies) with non-zero weight; PNFL requires {minimum}."
-            ),
-            situation_number=situation.situation_number,
-        )
-    ]
 
 
 def _categories_with_weight(weights: CategoryWeights) -> frozenset[int]:

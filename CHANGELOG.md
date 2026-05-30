@@ -1,0 +1,22 @@
+# Changelog
+
+- Add `PnflRuleWarning(UserWarning)`.
+- `PnflProfile.save()` is warn-and-persist (was raise-on-violation).
+- `save()` emits one `PnflRuleWarning` per violation, prefixed `[situation N]` when tied to a situation.
+- `save()` returns `tuple[Violation, ...]`.
+- Breaking change for `try/except PnflRuleError` callers.
+- Remove `PnflRuleError`.
+- Add `PnflProfile` property forwarders: `profile_type`, `substitutions`, `situations`, `pat_situations`, `field_goal_range`, `use_audibles`, `is_offense`, `is_defense`, `stop_clock_situations`.
+- Add `PnflProfile` `ClassVar`s: `NUMBER_SITUATIONS`, `NUMBER_PAT_SITUATIONS`, `FIELD_GOAL_RANGE_MIN`, `FIELD_GOAL_RANGE_MAX`.
+- Re-export `fbpro98-profile` value types from `pnfl_profile`.
+- Re-export `fbpro98-profile` I/O (`read_profile`, `parse_profile`, `write_profile`, etc.) from `pnfl_profile`.
+- Broaden min-categories waiver: any down, any time.
+- Waiver triggers when every category with weight > 0 is exempt.
+- Offense exempt set: `{FG, PUNT, RUN_CLOCK}` (`RUN_CLOCK` added).
+- Defense exempt set: `{FG, PUNT}`.
+- Matrix rules still fire under the waiver.
+- Add `offense_exempt_categories` and `defense_exempt_categories` fields to `PnflRules`.
+- Remove `KICK_CATEGORIES`.
+- `TST-OFF1.prf` baseline `offense_min_categories` updated 122 → 2.
+- Initial `PnflProfile` composition wrapper around `fbpro98-profile`'s `Profile` with PNFL rules validation.
+- Refined package docstring; ruff format alignment in `pyproject.toml`.

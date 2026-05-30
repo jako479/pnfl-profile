@@ -21,7 +21,7 @@ DATA_DIR = Path(__file__).parent / "data"
 OFF1_EXPECTED_VIOLATIONS = {
     "offense_allowed_categories": 5,
     "offense_mandatory_category": 11,
-    "offense_min_categories": 1,
+    "offense_min_categories": 2,
 }
 
 DEF1_EXPECTED_VIOLATIONS = {

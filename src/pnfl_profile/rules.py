@@ -60,6 +60,11 @@ PASS_LONG_ANY: Final[frozenset[int]] = frozenset({PASS_LONG_LEFT, PASS_LONG_MIDD
 PASS_MEDIUM_ANY: Final[frozenset[int]] = frozenset({PASS_MEDIUM_LEFT, PASS_MEDIUM_MIDDLE, PASS_MEDIUM_RIGHT})
 PASS_SHORT_ANY: Final[frozenset[int]] = frozenset({PASS_SHORT_LEFT, PASS_SHORT_MIDDLE, PASS_SHORT_RIGHT})
 
+# Min-categories waiver: skipped when every category with weight > 0 is in the
+# side's exempt set. Defense has no RUN_CLOCK (0x16 is outside DEFENSE_CATEGORIES).
+OFFENSE_EXEMPT_CATEGORIES: Final[frozenset[int]] = frozenset({FIELD_GOAL_PAT, PUNT, RUN_CLOCK})
+DEFENSE_EXEMPT_CATEGORIES: Final[frozenset[int]] = frozenset({FIELD_GOAL_PAT, PUNT})
+
 
 # ---------------------------------------------------------------------------
 # Per-situation rule type
@@ -79,7 +84,6 @@ class SituationRule:
 
     allowed_categories: frozenset[int] | None
     mandatory_alternatives: tuple[frozenset[int], ...]
-    min_distinct_categories: int
 
 
 # Keys into the per-situation rule maps. (Down, YardsToGo, FieldPosition) is enough —
@@ -113,12 +117,10 @@ def _rule(
     allowed: frozenset[int] | None,
     *,
     mandatory: tuple[frozenset[int], ...] = (),
-    min_categories: int = 3,
 ) -> SituationRule:
     return SituationRule(
         allowed_categories=allowed,
         mandatory_alternatives=mandatory,
-        min_distinct_categories=min_categories,
     )
 
 
@@ -142,13 +144,13 @@ _GOAL_LINE = frozenset({GOAL_LINE_PASS, GOAL_LINE_RUN})
 
 _OFFENSE_1ST_0_1 = _RUN_LEFT_MIDDLE | _PASS_SL_ML | _GOAL_LINE
 _OFFENSE_1ST_2_5_BETWEEN = _RUN_LEFT_MIDDLE | _PASS_SL_ML
-_OFFENSE_1ST_2_5_REDZONES = _RUN_LEFT_MIDDLE | _PASS_SL_ML | _GOAL_LINE
+_OFFENSE_1ST_2_5_GOALLINES = _RUN_LEFT_MIDDLE | _PASS_SL_ML | _GOAL_LINE
 _OFFENSE_1ST_6_10_BETWEEN = frozenset({RUN_MIDDLE}) | _PASS_SL_ML
 _OFFENSE_1ST_6_10_OFF5 = _RUN_LEFT_MIDDLE | _PASS_SL_ML | _GOAL_LINE
 
 _OFFENSE_2ND_0_1 = _RUN_LEFT_MIDDLE | _PASS_SM_MM | _GOAL_LINE
 _OFFENSE_2ND_2_5_BETWEEN = _RUN_LEFT_MIDDLE | _PASS_SM_MM
-_OFFENSE_2ND_2_5_REDZONES = _RUN_LEFT_MIDDLE | _PASS_SM_MM | _GOAL_LINE
+_OFFENSE_2ND_2_5_GOALLINES = _RUN_LEFT_MIDDLE | _PASS_SM_MM | _GOAL_LINE
 _OFFENSE_2ND_6_10_BETWEEN = _RUN_MIDDLE_RIGHT | _PASS_SM_MM
 _OFFENSE_2ND_6_10_OFF5 = _RUN_ALL_THREE | _PASS_SM_MM | _GOAL_LINE
 
@@ -156,7 +158,7 @@ _OFFENSE_3RD_NO_RDP = OFFENSE_CATEGORIES - {RAZZLE_DAZZLE_PASS}
 
 
 def _build_offense_rules() -> dict[SituationKey, SituationRule]:
-    """Per `viewtopic.php?f=18&t=28`, offensive rules for minutes_remaining > 5."""
+    """Per `https://pnfl.biz/messageboard/viewtopic.php?f=18&t=28`, offensive rules for minutes_remaining > 5."""
     rules: dict[SituationKey, SituationRule] = {}
 
     # 1st down ----------------------------------------------------------------
@@ -168,7 +170,7 @@ def _build_offense_rules() -> dict[SituationKey, SituationRule]:
     )
     rules.update(
         _spread(
-            _rule(_OFFENSE_1ST_2_5_REDZONES),
+            _rule(_OFFENSE_1ST_2_5_GOALLINES),
             _key_set(Down.FIRST, YardsToGo.TWO_TO_FIVE, (FieldPosition.INSIDE_DEF_5,)),
         )
     )
@@ -180,7 +182,7 @@ def _build_offense_rules() -> dict[SituationKey, SituationRule]:
     )
     rules.update(
         _spread(
-            _rule(_OFFENSE_1ST_2_5_REDZONES),
+            _rule(_OFFENSE_1ST_2_5_GOALLINES),
             _key_set(Down.FIRST, YardsToGo.TWO_TO_FIVE, (FieldPosition.INSIDE_OFF_5,)),
         )
     )
@@ -212,7 +214,7 @@ def _build_offense_rules() -> dict[SituationKey, SituationRule]:
     )
     rules.update(
         _spread(
-            _rule(_OFFENSE_2ND_2_5_REDZONES),
+            _rule(_OFFENSE_2ND_2_5_GOALLINES),
             _key_set(Down.SECOND, YardsToGo.TWO_TO_FIVE, (FieldPosition.INSIDE_DEF_5,)),
         )
     )
@@ -224,7 +226,7 @@ def _build_offense_rules() -> dict[SituationKey, SituationRule]:
     )
     rules.update(
         _spread(
-            _rule(_OFFENSE_2ND_2_5_REDZONES),
+            _rule(_OFFENSE_2ND_2_5_GOALLINES),
             _key_set(Down.SECOND, YardsToGo.TWO_TO_FIVE, (FieldPosition.INSIDE_OFF_5,)),
         )
     )
@@ -312,7 +314,8 @@ def _build_offense_rules() -> dict[SituationKey, SituationRule]:
 
 
 def _build_defense_rules() -> dict[SituationKey, SituationRule]:
-    """Per `viewtopic.php?f=18&t=28`, defensive mandatory categories on 3rd down."""
+    """Per `https://pnfl.biz/messageboard/viewtopic.php?f=18&t=28`, defensive
+    mandatory categories on 3rd down."""
     rules: dict[SituationKey, SituationRule] = {}
     rules.update(
         _spread(
@@ -362,6 +365,8 @@ class PnflRules:
     defense_relaxed_field_positions: frozenset[FieldPosition]
     min_categories_relaxed: int  # Usually 2
     min_categories_standard: int  # Usually 3
+    offense_exempt_categories: frozenset[int]  # Waive min-categories when every non-zero category is in this set
+    defense_exempt_categories: frozenset[int]
 
 
 PNFL_RULES: Final[PnflRules] = PnflRules(
@@ -373,4 +378,6 @@ PNFL_RULES: Final[PnflRules] = PnflRules(
     defense_relaxed_field_positions=frozenset({FieldPosition.INSIDE_DEF_5}),
     min_categories_relaxed=2,
     min_categories_standard=3,
+    offense_exempt_categories=OFFENSE_EXEMPT_CATEGORIES,
+    defense_exempt_categories=DEFENSE_EXEMPT_CATEGORIES,
 )

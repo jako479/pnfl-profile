@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from fbpro98_profile import Profile, read_profile
 from pnfl_profile import (
     PNFL_RULES,
     PnflProfile,
-    PnflRuleError,
+    PnflRuleWarning,
 )
 
 
@@ -51,34 +52,43 @@ def test_from_bytes_loads_profile(offense_profile: Profile, tmp_path: Path) -> N
     assert loaded.validate() == ()
 
 
-def test_save_writes_file_when_compliant(offense_profile: Profile, tmp_path: Path) -> None:
+def test_save_returns_empty_when_compliant(offense_profile: Profile, tmp_path: Path) -> None:
     out_path = tmp_path / "OK.prf"
-    PnflProfile(profile=offense_profile, rules=PNFL_RULES).save(str(out_path))
+    result = PnflProfile(profile=offense_profile, rules=PNFL_RULES).save(str(out_path))
+    assert result == ()
     assert out_path.exists()
-    # Loadable via fbpro98-profile too.
     reloaded = read_profile(str(out_path))
     assert reloaded == offense_profile
 
 
-def test_save_raises_pnfl_rule_error_on_violations(offense_profile: Profile, tmp_path: Path) -> None:
+def test_save_persists_despite_violations(
+    offense_profile: Profile,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     bad = replace(offense_profile, use_audibles=True)
     pp = PnflProfile(profile=bad, rules=PNFL_RULES)
     out_path = tmp_path / "BAD.prf"
 
-    with pytest.raises(PnflRuleError) as exc_info:
-        pp.save(str(out_path))
+    with pytest.warns(PnflRuleWarning) as captured, caplog.at_level(logging.INFO, logger="pnfl_profile.model"):
+        result = pp.save(str(out_path))
 
-    assert not out_path.exists()
-    assert exc_info.value.violations
-    assert any(v.rule_name == "audibles_unchecked" for v in exc_info.value.violations)
+    # File IS written despite violations.
+    assert out_path.exists()
+    assert any(v.rule_name == "audibles_unchecked" for v in result)
+    assert any("audibles" in str(w.message).lower() for w in captured.list)
+    assert any(
+        r.levelno == logging.INFO and "Persisted with" in r.message and "violation" in r.message for r in caplog.records
+    )
 
 
-def test_save_raises_does_not_overwrite_existing(offense_profile: Profile, tmp_path: Path) -> None:
-    out_path = tmp_path / "PRESERVED.prf"
+def test_save_overwrites_existing_with_violations(offense_profile: Profile, tmp_path: Path) -> None:
+    """Warn-and-persist policy: an existing file is replaced even when violations are present."""
+    out_path = tmp_path / "OVERWRITTEN.prf"
     out_path.write_bytes(b"sentinel")
     bad = replace(offense_profile, use_audibles=True)
 
-    with pytest.raises(PnflRuleError):
+    with pytest.warns(PnflRuleWarning):
         PnflProfile(profile=bad, rules=PNFL_RULES).save(str(out_path))
 
-    assert out_path.read_bytes() == b"sentinel"
+    assert out_path.read_bytes() != b"sentinel"
